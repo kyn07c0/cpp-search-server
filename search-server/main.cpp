@@ -425,13 +425,17 @@ void TestAddDocumentContent()
     const vector<int> ratings = {4, 4, 5};
 
     {
+        // Убеждаемся, что после создании экземпляра поискового сервера в нем отсутствуют документы
         SearchServer server;
-        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
-        const auto found_docs = server.FindTopDocuments("IT"s);
+        ASSERT_EQUAL(server.GetDocumentCount(), 0);
 
-        ASSERT(count_if(found_docs.begin(), found_docs.end(), [doc_id](Document item){
-            return item.id == doc_id;
-        }));
+        // Проверяем, что после добавления одного документа их общее кол-во прирасло на один документ
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        ASSERT_EQUAL(server.GetDocumentCount(), 1);
+
+        // Проверяем, что при попытке добавить документ с существующим id он добавлен не будет
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        ASSERT_EQUAL(server.GetDocumentCount(), 1);
     }
 }
 
@@ -525,17 +529,26 @@ void TestMatchDocument()
         server.AddDocument(1, "пушистый кот лизал пушистый хвост"s, DocumentStatus::ACTUAL, {7, 2, 7});
         server.AddDocument(2, "домашний кот и его выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
 
-        tuple<vector<string>, DocumentStatus> result_1 = server.MatchDocument("кот енот", 0);
-        ASSERT_EQUAL(get<0>(result_1)[0], "кот");
+        vector<string> matching_words = {};
+        DocumentStatus document_status;
 
-        tuple<vector<string>, DocumentStatus> result_2 = server.MatchDocument("глаза енот", 1);
-        ASSERT(get<0>(result_2).empty());
+        tuple<vector<string>, DocumentStatus> result_1 = server.MatchDocument("кот енот", 1);
+        tie(matching_words, document_status) = result_1;
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "кот"), 1);
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "енот"), 0);
 
-        tuple<vector<string>, DocumentStatus> result_3 = server.MatchDocument("кот глаза", 2);
-        ASSERT(get<0>(result_3)[0] == "глаза" && get<0>(result_3)[1] == "кот");
+        tuple<vector<string>, DocumentStatus> result_2 = server.MatchDocument("глаза енот", 2);
+        tie(matching_words, document_status) = result_2;
+        ASSERT(matching_words.empty());
 
-        tuple<vector<string>, DocumentStatus> result_4 = server.MatchDocument("кот -глаза", 2);
-        ASSERT(get<0>(result_4).empty());
+        tuple<vector<string>, DocumentStatus> result_3 = server.MatchDocument("кот глаза", 3);
+        tie(matching_words, document_status) = result_3;
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "глаза"), 1);
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "кот"), 1);
+
+        tuple<vector<string>, DocumentStatus> result_4 = server.MatchDocument("кот -глаза", 3);
+        tie(matching_words, document_status) = result_4;
+        ASSERT(matching_words.empty());
     }
 }
 
@@ -550,9 +563,24 @@ void TestRelevanceCalculation()
 
         const auto found_docs = server.FindTopDocuments("кот пёс"s);
 
-        ASSERT_EQUAL(found_docs[0].relevance, 0.27465307216702745);
-        ASSERT_EQUAL(found_docs[1].relevance, 0.1013662770270411);
-        ASSERT_EQUAL(found_docs[2].relevance, 0.081093021621632885);
+        double idf_cat = log(3.0/2.0);
+        double idf_dog = log(3.0/1.0);
+
+        double tf_cat_doc_1 = 1.0 / 5.0;
+        double tf_dog_doc_1 = 0.0 / 5.0;
+        double relevance_doc_1 = (idf_cat * tf_cat_doc_1) + (idf_dog * tf_dog_doc_1); // 0.081093021621632885
+
+        double tf_cat_doc_2 = 1.0 / 4.0;
+        double tf_dog_doc_2 = 0.0 / 4.0;
+        double relevance_doc_2 = (idf_cat * tf_cat_doc_2) + (idf_dog * tf_dog_doc_2); // 0.1013662770270411
+
+        double tf_cat_doc_3 = 0.0 / 4.0;
+        double tf_dog_doc_3 = 1.0 / 4.0;
+        double relevance_doc_3 = (idf_cat * tf_cat_doc_3) + (idf_dog * tf_dog_doc_3); // 0.27465307216702745
+
+        ASSERT_EQUAL(found_docs[0].relevance, relevance_doc_3);
+        ASSERT_EQUAL(found_docs[1].relevance, relevance_doc_2);
+        ASSERT_EQUAL(found_docs[2].relevance, relevance_doc_1);
     }
 }
 
@@ -568,6 +596,8 @@ void TestRelevanceSorting()
         server.AddDocument(4, "ухоженный скворец евгений"s, DocumentStatus::BANNED, {9});
 
         const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s);
+        
+        ASSERT_EQUAL(found_docs.size(), 3);
 
         ASSERT(found_docs[0].relevance > found_docs[1].relevance);
         ASSERT(found_docs[1].relevance > found_docs[2].relevance);
@@ -586,74 +616,81 @@ void TestRatingDocuments()
     {
         SearchServer server;
         server.AddDocument(1, "Есть преступление хуже, чем сжигать книги. Например - не читать их."s, DocumentStatus::ACTUAL, {0, 10, 0, 2, 3});
-        server.AddDocument(2, "По вечерам я люблю читать книги."s, DocumentStatus::ACTUAL, {1, 12, 5});
+        server.AddDocument(2, "По вечерам я люблю читать книги."s, DocumentStatus::IRRELEVANT, {1, 12, 5});
         server.AddDocument(3, "На уроке литературы дети должны читать книги."s, DocumentStatus::BANNED, {6, 2, 1});
 
+        int rating_doc_1 = (0 + 10 + 0 + 2 + 3) / 5;
+        int rating_doc_2 = (1 + 12 + 5) / 3;
+        int rating_doc_3 = (6 + 2 + 1) / 3;
+
         const auto found_actual_docs = server.FindTopDocuments("книги читать"s);
-        ASSERT_EQUAL(found_actual_docs[0].rating, 6);
-        ASSERT_EQUAL(found_actual_docs[1].rating, 3);
+        ASSERT_EQUAL(found_actual_docs[0].rating, rating_doc_1);
+
+        const auto found_irrelevant_docs = server.FindTopDocuments("книги читать"s, DocumentStatus::IRRELEVANT);
+        ASSERT_EQUAL(found_irrelevant_docs[0].rating, rating_doc_2);
 
         const auto found_banned_docs = server.FindTopDocuments("книги читать"s, DocumentStatus::BANNED);
-        ASSERT_EQUAL(found_banned_docs[0].rating, 3);
+        ASSERT_EQUAL(found_banned_docs[0].rating, rating_doc_3);
     }
 }
 
-// Тест проверяет работу фильтра поиска с использованием предиката
-void TestUserFilterResult()
+// Тест проверяет работу фильтра документов по статусу
+void TestStatusFilter()
 {
     const string content = "cat in the city"s;
 
-    // Проверка работы фильтра "статус документа"
-    {
-        SearchServer server;
-        server.AddDocument(1, content, DocumentStatus::ACTUAL, {8, 3, 9});
-        server.AddDocument(2, content, DocumentStatus::ACTUAL, {3, 2, 2});
-        server.AddDocument(3, content, DocumentStatus::ACTUAL, {4, 23, 1});
-        server.AddDocument(4, content, DocumentStatus::ACTUAL, {5, 1, 3});
-        server.AddDocument(5, content, DocumentStatus::BANNED, {4, 3, 9});
-        server.AddDocument(6, content, DocumentStatus::BANNED, {1, 12, 2});
-        server.AddDocument(7, content, DocumentStatus::IRRELEVANT, {6, 4, 2});
-        server.AddDocument(8, content, DocumentStatus::IRRELEVANT, {5, 7, 1});
-        server.AddDocument(9, content, DocumentStatus::REMOVED, {6, 5, 5});
+    SearchServer server;
+    server.AddDocument(1, content, DocumentStatus::ACTUAL, {8, 3, 9});
+    server.AddDocument(2, content, DocumentStatus::ACTUAL, {3, 2, 2});
+    server.AddDocument(3, content, DocumentStatus::ACTUAL, {4, 23, 1});
+    server.AddDocument(4, content, DocumentStatus::ACTUAL, {5, 1, 3});
+    server.AddDocument(5, content, DocumentStatus::BANNED, {4, 3, 9});
+    server.AddDocument(6, content, DocumentStatus::BANNED, {1, 12, 2});
+    server.AddDocument(7, content, DocumentStatus::IRRELEVANT, {6, 4, 2});
+    server.AddDocument(8, content, DocumentStatus::IRRELEVANT, {5, 7, 1});
+    server.AddDocument(9, content, DocumentStatus::REMOVED, {6, 5, 5});
 
-        const auto found_actual_docs = server.FindTopDocuments("city"s, DocumentStatus::ACTUAL);
-        const auto found_banned_docs = server.FindTopDocuments("city"s, DocumentStatus::BANNED);
-        const auto found_irrelevant_docs = server.FindTopDocuments("city"s, DocumentStatus::IRRELEVANT);
-        const auto found_remove_docs = server.FindTopDocuments("city"s, DocumentStatus::REMOVED);
+    const auto found_actual_docs = server.FindTopDocuments("city"s, DocumentStatus::ACTUAL);
+    const auto found_banned_docs = server.FindTopDocuments("city"s, DocumentStatus::BANNED);
+    const auto found_irrelevant_docs = server.FindTopDocuments("city"s, DocumentStatus::IRRELEVANT);
+    const auto found_remove_docs = server.FindTopDocuments("city"s, DocumentStatus::REMOVED);
 
-        ASSERT_EQUAL(found_actual_docs.size(), 4);
-        ASSERT_EQUAL(found_banned_docs.size(), 2);
-        ASSERT_EQUAL(found_irrelevant_docs.size(), 2);
-        ASSERT_EQUAL(found_remove_docs.size(), 1);
-    }
+    ASSERT_EQUAL(found_actual_docs.size(), 4);
+    ASSERT_EQUAL(found_banned_docs.size(), 2);
+    ASSERT_EQUAL(found_irrelevant_docs.size(), 2);
+    ASSERT_EQUAL(found_remove_docs.size(), 1);
+}
 
-    {
-        SearchServer server;
-        server.AddDocument(1, content, DocumentStatus::ACTUAL, {8, 4, 9});              // rating = 7
-        server.AddDocument(2, content, DocumentStatus::ACTUAL, {3, 2, 2});              // rating = 2
-        server.AddDocument(3, content, DocumentStatus::ACTUAL, {4, 2, 0});              // rating = 2
-        server.AddDocument(4, content, DocumentStatus::ACTUAL, {5, 1, 3});              // rating = 3
-        server.AddDocument(5, content, DocumentStatus::BANNED, {4, 3, 8});              // rating = 5
-        server.AddDocument(6, content, DocumentStatus::IRRELEVANT, {1, 12, 2});         // rating = 5
-        server.AddDocument(7, content, DocumentStatus::IRRELEVANT, {6, 4, 2});          // rating = 4
-        server.AddDocument(8, content, DocumentStatus::IRRELEVANT, {5, 6, 1, 5, 3});    // rating = 4
-        server.AddDocument(9, content, DocumentStatus::REMOVED, {1, 1, 1});             // rating = 1
+// Тест проверяет работу фильтра документов с использованием предиката
+void TestPredicateFilter()
+{
+    const string content = "cat in the city"s;
 
-        ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, [[maybe_unused]] DocumentStatus status, int rating) {
-            return rating == 1; }).size() == 1);
-        ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, [[maybe_unused]] DocumentStatus status, int rating) {
-            return rating < 3; }).size() == 3);
-        ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, DocumentStatus status, int rating) {
-            return status == DocumentStatus::BANNED && rating < 4; }).size() == 0);
-        ASSERT(server.FindTopDocuments("city"s, [](int doc_id, [[maybe_unused]] DocumentStatus status, [[maybe_unused]] int rating) {
-            return doc_id == 4; }).size() == 1);
-        ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, [[maybe_unused]] DocumentStatus status, int rating) {
-            return rating > 2 && rating < 5; }).size() == 3);
-        ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, DocumentStatus status, int rating) {
-            return status == DocumentStatus::IRRELEVANT && rating == 4; }).size() == 2);
-        ASSERT(server.FindTopDocuments("city"s, [](int doc_id, [[maybe_unused]] DocumentStatus status, [[maybe_unused]] int rating) {
-            return doc_id == 4; }).size() == 1);
-    }
+    SearchServer server;
+    server.AddDocument(1, content, DocumentStatus::ACTUAL, {8, 4, 9});              // rating = 7
+    server.AddDocument(2, content, DocumentStatus::ACTUAL, {3, 2, 2});              // rating = 2
+    server.AddDocument(3, content, DocumentStatus::ACTUAL, {4, 2, 0});              // rating = 2
+    server.AddDocument(4, content, DocumentStatus::ACTUAL, {5, 1, 3});              // rating = 3
+    server.AddDocument(5, content, DocumentStatus::BANNED, {4, 3, 8});              // rating = 5
+    server.AddDocument(6, content, DocumentStatus::IRRELEVANT, {1, 12, 2});         // rating = 5
+    server.AddDocument(7, content, DocumentStatus::IRRELEVANT, {6, 4, 2});          // rating = 4
+    server.AddDocument(8, content, DocumentStatus::IRRELEVANT, {5, 6, 1, 5, 3});    // rating = 4
+    server.AddDocument(9, content, DocumentStatus::REMOVED, {1, 1, 1});             // rating = 1
+
+    ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, [[maybe_unused]] DocumentStatus status, int rating) {
+        return rating == 1; }).size() == 1);
+    ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, [[maybe_unused]] DocumentStatus status, int rating) {
+        return rating < 3; }).size() == 3);
+    ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, DocumentStatus status, int rating) {
+        return status == DocumentStatus::BANNED && rating < 4; }).size() == 0);
+    ASSERT(server.FindTopDocuments("city"s, [](int doc_id, [[maybe_unused]] DocumentStatus status, [[maybe_unused]] int rating) {
+        return doc_id == 4; }).size() == 1);
+    ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, [[maybe_unused]] DocumentStatus status, int rating) {
+        return rating > 2 && rating < 5; }).size() == 3);
+    ASSERT(server.FindTopDocuments("city"s, []([[maybe_unused]] int doc_id, DocumentStatus status, int rating) {
+        return status == DocumentStatus::IRRELEVANT && rating == 4; }).size() == 2);
+    ASSERT(server.FindTopDocuments("city"s, [](int doc_id, [[maybe_unused]] DocumentStatus status, [[maybe_unused]] int rating) {
+        return doc_id == 4; }).size() == 1);
 }
 
 template <typename T>
@@ -676,7 +713,8 @@ void TestSearchServer()
     RUN_TEST(TestRelevanceCalculation);
     RUN_TEST(TestRelevanceSorting);
     RUN_TEST(TestRatingDocuments);
-    RUN_TEST(TestUserFilterResult);
+    RUN_TEST(TestStatusFilter);
+    RUN_TEST(TestPredicateFilter);
 }
 
 // --------- Окончание модульных тестов поисковой системы -----------
