@@ -525,9 +525,9 @@ void TestMatchDocument()
     // Проверка выполнения поискового запроса
     {
         SearchServer server;
-        server.AddDocument(0, "белый кот имел выразтельные глаза и модный ошейник"s, DocumentStatus::ACTUAL, {8, -3});
-        server.AddDocument(1, "пушистый кот лизал пушистый хвост"s, DocumentStatus::ACTUAL, {7, 2, 7});
-        server.AddDocument(2, "домашний кот и его выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
+        server.AddDocument(1, "белый кот имел выразтельные глаза и модный ошейник"s, DocumentStatus::ACTUAL, {8, -3});
+        server.AddDocument(2, "пушистый кот лизал пушистый хвост"s, DocumentStatus::ACTUAL, {7, 2, 7});
+        server.AddDocument(3, "домашний кот и его выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
 
         vector<string> matching_words = {};
         DocumentStatus document_status;
