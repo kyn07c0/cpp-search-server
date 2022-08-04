@@ -4,13 +4,8 @@ SearchServer::SearchServer()
 {
 }
 
-SearchServer::SearchServer(const std::string& stop_words_text) //: SearchServer(SplitIntoWords(stop_words_text))
+SearchServer::SearchServer(const std::string& stop_words_text) : SearchServer(SplitIntoWords(stop_words_text))
 {
-    for(const std::string& word : SplitIntoWords(stop_words_text))
-    {
-        ValidateStopWord(word);
-        stop_words_.insert(word);
-    }
 }
 
 void SearchServer::AddDocument(int document_id, const std::string& document, DocumentStatus status, const std::vector<int>& ratings)
@@ -86,7 +81,7 @@ std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument
         {
             continue;
         }
-        if(word_to_document_freqs_.at(word).count(document_id))
+        if(word_to_document_freqs_.at(word).count(document_id) != 0)
         {
             matched_words.clear();
             break;
@@ -194,7 +189,9 @@ bool SearchServer::IsValidWord(const std::string& word)
 
 bool SearchServer::IsValidSearchMinusWord(const std::string& word)
 {
-    if(word == "-" || (word[0] == '-' && word[1] == '-'))
+    std::string prefix_word = word.substr(0, 2);
+
+    if(prefix_word == "-" || prefix_word == "--")
     {
         return false;
     }
@@ -246,7 +243,7 @@ void SearchServer::ValidateQuery(const std::string raw_query) const
 
 void SearchServer::ValidateDocumentIndex(const int index) const
 {
-    if(index > documents_.size() - 1)
+    if(index >= documents_.size())
     {
         throw std::out_of_range("Индекс документа выходит за пределы допустимого диапазона.");
     }
