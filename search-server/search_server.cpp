@@ -57,8 +57,6 @@ int SearchServer::GetDocumentId(int index) const
 
 std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::string& raw_query, int document_id) const
 {
-    ValidateQuery(raw_query);
-
     const Query query = ParseQuery(raw_query);
     std::vector<std::string> matched_words;
 
@@ -99,7 +97,7 @@ bool SearchServer::IsStopWord(const std::string& word) const
 std::vector<std::string> SearchServer::SplitIntoWordsNoStop(const std::string& text) const
 {
     std::vector<std::string> words;
-    for (const std::string& word : SplitIntoWords(text))
+    for(const std::string& word : SplitIntoWords(text))
     {
         if (!IsValidWord(word))
         {
@@ -131,10 +129,6 @@ int SearchServer::ComputeAverageRating(const std::vector<int>& ratings)
 
 SearchServer::QueryWord SearchServer::ParseQueryWord(const std::string& text) const
 {
-    if(text.empty())
-    {
-        throw std::invalid_argument("Query word is empty"s);
-    }
     std::string word = text;
     bool is_minus = false;
 
@@ -142,11 +136,6 @@ SearchServer::QueryWord SearchServer::ParseQueryWord(const std::string& text) co
     {
         is_minus = true;
         word = word.substr(1);
-    }
-
-    if(word.empty() || word[0] == '-' || !IsValidWord(word))
-    {
-        throw std::invalid_argument("Query word "s + text + " is invalid"s);
     }
 
     return {word, is_minus, IsStopWord(word)};
@@ -157,8 +146,9 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const
     Query result;
     for (const std::string& word : SplitIntoWords(text))
     {
-        const auto query_word = ParseQueryWord(word);
+        ValidateQueryWord(word);
 
+        const auto query_word = ParseQueryWord(word);
         if (!query_word.is_stop)
         {
             if (query_word.is_minus)
@@ -203,7 +193,7 @@ void SearchServer::ValidateStopWord(const std::string stop_word)
 {
     if(!IsValidWord(stop_word))
     {
-        throw std::invalid_argument("Стоп-слово содержит недопустимый символ.");
+        throw std::invalid_argument("Стоп-слово содержит недопустимый символ."s);
     }
 }
 
@@ -211,33 +201,35 @@ void SearchServer::ValidateNewDocument(const int document_id, const std::string&
 {
     if(document_id < 0)
     {
-        throw std::invalid_argument("Попытка добавить документ с отрицательным id.");
+        throw std::invalid_argument("Попытка добавить документ с отрицательным id."s);
     }
 
     if(documents_.find(document_id) != documents_.end())
     {
-        throw std::invalid_argument("Попытка добавить документ c id ранее добавленного документа.");
+        throw std::invalid_argument("Попытка добавить документ c id ранее добавленного документа."s);
     }
 
     if(!IsValidWord(document))
     {
-        throw std::invalid_argument("Наличие недопустимых символов в тексте добавляемого документа.");
+        throw std::invalid_argument("Наличие недопустимых символов в тексте добавляемого документа."s);
     }
 }
 
-void SearchServer::ValidateQuery(const std::string raw_query) const
+void SearchServer::ValidateQueryWord(const std::string word) const
 {
-    for(const std::string& word_query : SplitIntoWords(raw_query))
+    if(word.empty())
     {
-        if(!IsValidWord(raw_query))
-        {
-            throw std::invalid_argument("Наличие недопустимых символов в слове поискового запроса.");
-        }
+        throw std::invalid_argument("Слово запроса пустое"s);
+    }
 
-        if(!IsValidSearchMinusWord(word_query))
-        {
-            throw std::invalid_argument("Некорректно указано исключающее слово поискового запроса.");
-        }
+    if(!IsValidWord(word))
+    {
+        throw std::invalid_argument("Наличие недопустимых символов в слове поискового запроса."s);
+    }
+
+    if(!IsValidSearchMinusWord(word))
+    {
+        throw std::invalid_argument("Некорректно указано исключающее слово поискового запроса."s);
     }
 }
 
@@ -245,6 +237,6 @@ void SearchServer::ValidateDocumentIndex(const int index) const
 {
     if(index >= documents_.size())
     {
-        throw std::out_of_range("Индекс документа выходит за пределы допустимого диапазона.");
+        throw std::out_of_range("Индекс документа выходит за пределы допустимого диапазона."s);
     }
 }
