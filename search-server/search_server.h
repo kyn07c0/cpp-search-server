@@ -78,7 +78,7 @@ class SearchServer
         static bool IsValidSearchMinusWord(const std::string& word);
         void ValidateStopWord(const std::string stop_word);
         void ValidateNewDocument(const int document_id, const std::string& document) const;
-        void ValidateQuery(const std::string raw_query) const;
+        void ValidateQueryWord(const std::string word) const;
         void ValidateDocumentIndex(const int index) const;
 };
 
@@ -96,8 +96,6 @@ SearchServer::SearchServer(const StringContainer& stop_words)
 template <typename DocumentPredicate>
 std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query, DocumentPredicate document_predicate) const
 {
-    ValidateQuery(raw_query);
-
     const auto query = ParseQuery(raw_query);
 
     auto matched_documents = FindAllDocuments(query, document_predicate);
