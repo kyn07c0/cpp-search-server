@@ -23,7 +23,7 @@ void SearchServer::AddDocument(int document_id, const std::string& document, Doc
     }
 
     documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
-    document_ids_.push_back(document_id);
+    document_ids_.insert(document_id);
 }
 
 void SearchServer::SetStopWords(const std::string& stop_words_text)
@@ -52,12 +52,12 @@ int SearchServer::GetDocumentCount() const
     return documents_.size();
 }
 
-std::vector<int>::const_iterator SearchServer::begin() const
+std::set<int>::const_iterator SearchServer::begin() const
 {
     return document_ids_.begin();
 }
 
-std::vector<int>::const_iterator SearchServer::end() const
+std::set<int>::const_iterator SearchServer::end() const
 {
     return document_ids_.end();
 }
@@ -71,9 +71,7 @@ void SearchServer::RemoveDocument(int document_id)
 {
     document_word_freqs_.erase(document_id);
     documents_.erase(document_id);
-
-    std::vector<int>::iterator pos = std::find(document_ids_.begin(), document_ids_.end(), document_id);
-    document_ids_.erase(pos);
+    document_ids_.erase(document_id);
 }
 
 std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::string& raw_query, int document_id) const
