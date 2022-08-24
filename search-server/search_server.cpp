@@ -1,5 +1,7 @@
 #include "search_server.h"
 
+using namespace std::literals;
+
 SearchServer::SearchServer()
 {
 }
