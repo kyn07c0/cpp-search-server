@@ -2,8 +2,6 @@
 
 #include <iostream>
 
-using namespace std::literals;
-
 enum class DocumentStatus
 {
     ACTUAL,
@@ -12,7 +10,8 @@ enum class DocumentStatus
     REMOVED,
 };
 
-struct Document {
+struct Document 
+{
     Document() = default;
 
     Document(int id, double relevance, int rating);
