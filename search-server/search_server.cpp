@@ -76,8 +76,6 @@ void SearchServer::RemoveDocument(int document_id)
 
 std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::string& raw_query, int document_id) const
 {
-    ValidateQuery(raw_query);
-
     const Query query = ParseQuery(raw_query);
     std::vector<std::string> matched_words;
 
@@ -167,6 +165,8 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const
     Query result;
     for (const std::string& word : SplitIntoWords(text))
     {
+        ValidateWordQuery(word);
+
         const auto query_word = ParseQueryWord(word);
 
         if (!query_word.is_stop)
@@ -244,19 +244,16 @@ void SearchServer::ValidateNewDocument(const int document_id, const std::string&
     }
 }
 
-void SearchServer::ValidateQuery(const std::string raw_query) const
+void SearchServer::ValidateWordQuery(const std::string word) const
 {
-    for(const std::string& word_query : SplitIntoWords(raw_query))
+    if(!IsValidWord(word))
     {
-        if(!IsValidWord(raw_query))
-        {
-            throw std::invalid_argument("Наличие недопустимых символов в слове поискового запроса.");
-        }
+        throw std::invalid_argument("Наличие недопустимых символов в слове поискового запроса.");
+    }
 
-        if(!IsValidSearchMinusWord(word_query))
-        {
-            throw std::invalid_argument("Некорректно указано исключающее слово поискового запроса.");
-        }
+    if(!IsValidSearchMinusWord(word))
+    {
+        throw std::invalid_argument("Некорректно указано исключающее слово поискового запроса.");
     }
 }
 
