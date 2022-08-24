@@ -15,9 +15,11 @@ void SearchServer::AddDocument(int document_id, const std::string& document, Doc
     const auto words = SplitIntoWordsNoStop(document);
     const double inv_word_count = 1.0 / words.size();
 
-    for (const std::string& word : words) {
-        word_to_document_freqs_[word][document_id] += inv_word_count;
+    for(const std::string& word : words)
+    {
+        document_word_freqs_[document_id][word] += inv_word_count;
     }
+
     documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
     document_ids_.push_back(document_id);
 }
@@ -48,26 +50,40 @@ int SearchServer::GetDocumentCount() const
     return documents_.size();
 }
 
-int SearchServer::GetDocumentId(int index) const
+std::vector<int>::const_iterator SearchServer::begin() const
 {
-    ValidateDocumentIndex(index);
+    return document_ids_.begin();
+}
 
-    return document_ids_.at(index);
+std::vector<int>::const_iterator SearchServer::end() const
+{
+    return document_ids_.end();
+}
+
+const std::map<std::string, double>& SearchServer::GetWordFrequencies(int document_id) const
+{
+    return document_word_freqs_.at(document_id);
+}
+
+void SearchServer::RemoveDocument(int document_id)
+{
+    document_word_freqs_.erase(document_id);
+    documents_.erase(document_id);
+
+    std::vector<int>::iterator pos = std::find(document_ids_.begin(), document_ids_.end(), document_id);
+    document_ids_.erase(pos);
 }
 
 std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(const std::string& raw_query, int document_id) const
 {
+    ValidateQuery(raw_query);
+
     const Query query = ParseQuery(raw_query);
     std::vector<std::string> matched_words;
 
     for(const std::string& word : query.plus_words)
     {
-        if(word_to_document_freqs_.count(word) == 0)
-        {
-            continue;
-        }
-
-        if(word_to_document_freqs_.at(word).count(document_id))
+        if(document_word_freqs_.at(document_id).count(word) > 0)
         {
             matched_words.push_back(word);
         }
@@ -75,11 +91,7 @@ std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument
 
     for(const std::string& word : query.minus_words)
     {
-        if(word_to_document_freqs_.count(word) == 0)
-        {
-            continue;
-        }
-        if(word_to_document_freqs_.at(word).count(document_id) != 0)
+        if(document_word_freqs_.at(document_id).count(word) > 0)
         {
             matched_words.clear();
             break;
@@ -97,7 +109,7 @@ bool SearchServer::IsStopWord(const std::string& word) const
 std::vector<std::string> SearchServer::SplitIntoWordsNoStop(const std::string& text) const
 {
     std::vector<std::string> words;
-    for(const std::string& word : SplitIntoWords(text))
+    for (const std::string& word : SplitIntoWords(text))
     {
         if (!IsValidWord(word))
         {
@@ -129,6 +141,10 @@ int SearchServer::ComputeAverageRating(const std::vector<int>& ratings)
 
 SearchServer::QueryWord SearchServer::ParseQueryWord(const std::string& text) const
 {
+    if(text.empty())
+    {
+        throw std::invalid_argument("Query word is empty"s);
+    }
     std::string word = text;
     bool is_minus = false;
 
@@ -136,6 +152,11 @@ SearchServer::QueryWord SearchServer::ParseQueryWord(const std::string& text) co
     {
         is_minus = true;
         word = word.substr(1);
+    }
+
+    if(word.empty() || word[0] == '-' || !IsValidWord(word))
+    {
+        throw std::invalid_argument("Query word "s + text + " is invalid"s);
     }
 
     return {word, is_minus, IsStopWord(word)};
@@ -146,9 +167,8 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const
     Query result;
     for (const std::string& word : SplitIntoWords(text))
     {
-        ValidateQueryWord(word);
-
         const auto query_word = ParseQueryWord(word);
+
         if (!query_word.is_stop)
         {
             if (query_word.is_minus)
@@ -167,7 +187,16 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const
 
 double SearchServer::ComputeWordInverseDocumentFreq(const std::string& word) const
 {
-    return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
+    int num_doc_with_world = 0;
+    for(auto it = document_word_freqs_.begin(); it != document_word_freqs_.end(); ++it)
+    {
+        if(it->second.count(word) > 0)
+        {
+            num_doc_with_world++;
+        }
+    }
+
+    return log(GetDocumentCount() * 1.0 / num_doc_with_world);
 }
 
 bool SearchServer::IsValidWord(const std::string& word)
@@ -193,7 +222,7 @@ void SearchServer::ValidateStopWord(const std::string stop_word)
 {
     if(!IsValidWord(stop_word))
     {
-        throw std::invalid_argument("Стоп-слово содержит недопустимый символ."s);
+        throw std::invalid_argument("Стоп-слово содержит недопустимый символ.");
     }
 }
 
@@ -201,35 +230,33 @@ void SearchServer::ValidateNewDocument(const int document_id, const std::string&
 {
     if(document_id < 0)
     {
-        throw std::invalid_argument("Попытка добавить документ с отрицательным id."s);
+        throw std::invalid_argument("Попытка добавить документ с отрицательным id.");
     }
 
     if(documents_.find(document_id) != documents_.end())
     {
-        throw std::invalid_argument("Попытка добавить документ c id ранее добавленного документа."s);
+        throw std::invalid_argument("Попытка добавить документ c id ранее добавленного документа.");
     }
 
     if(!IsValidWord(document))
     {
-        throw std::invalid_argument("Наличие недопустимых символов в тексте добавляемого документа."s);
+        throw std::invalid_argument("Наличие недопустимых символов в тексте добавляемого документа.");
     }
 }
 
-void SearchServer::ValidateQueryWord(const std::string word) const
+void SearchServer::ValidateQuery(const std::string raw_query) const
 {
-    if(word.empty())
+    for(const std::string& word_query : SplitIntoWords(raw_query))
     {
-        throw std::invalid_argument("Слово запроса пустое"s);
-    }
+        if(!IsValidWord(raw_query))
+        {
+            throw std::invalid_argument("Наличие недопустимых символов в слове поискового запроса.");
+        }
 
-    if(!IsValidWord(word))
-    {
-        throw std::invalid_argument("Наличие недопустимых символов в слове поискового запроса."s);
-    }
-
-    if(!IsValidSearchMinusWord(word))
-    {
-        throw std::invalid_argument("Некорректно указано исключающее слово поискового запроса."s);
+        if(!IsValidSearchMinusWord(word_query))
+        {
+            throw std::invalid_argument("Некорректно указано исключающее слово поискового запроса.");
+        }
     }
 }
 
@@ -237,6 +264,6 @@ void SearchServer::ValidateDocumentIndex(const int index) const
 {
     if(index >= documents_.size())
     {
-        throw std::out_of_range("Индекс документа выходит за пределы допустимого диапазона."s);
+        throw std::out_of_range("Индекс документа выходит за пределы допустимого диапазона.");
     }
 }
