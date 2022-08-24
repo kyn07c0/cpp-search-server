@@ -1,5 +1,7 @@
 #include "test_example_functions.h"
 
+using namespace std::literals;
+
 template <typename T>
 std::ostream& operator<<(std::ostream& out, const std::vector<T>& items)
 {
