@@ -3,32 +3,23 @@
 void RemoveDuplicates(SearchServer& search_server)
 {
     std::set<int> document_id_for_del;
+    std::set<std::set<std::string>> unique_word_sets;
 
     for(const int document_id : search_server)
     {
-        const std::map<std::string, double> word_freq = search_server.GetWordFrequencies(document_id);
-
-        for(const int next_document_id : search_server)
+        std::set<std::string> word_set;
+        for(auto [word, freq] : search_server.GetWordFrequencies(document_id))
         {
-            if(next_document_id > document_id)
-            {
-                std::set<std::string> words_current_doc;
-                for(const auto& [word, freq] : search_server.GetWordFrequencies(document_id))
-                {
-                    words_current_doc.insert(word);
-                }
+            word_set.insert(word);
+        }
 
-                std::set<std::string> words_next_doc;
-                for(const auto& [word, freq] : search_server.GetWordFrequencies(next_document_id))
-                {
-                    words_next_doc.insert(word);
-                }
-
-                if(words_current_doc == words_next_doc)
-                {
-                    document_id_for_del.insert(next_document_id);
-                }
-            }
+        if(unique_word_sets.count(word_set) != 0)
+        {
+            document_id_for_del.insert(document_id);
+        }
+        else
+        {
+            unique_word_sets.insert(word_set);
         }
     }
 
