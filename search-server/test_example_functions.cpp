@@ -103,6 +103,7 @@ void TestAddDocumentContent()
                                 "to leave an impact in your IT interview."s;
     const std::vector<int> ratings = {4, 4, 5};
 
+    try
     {
         // Убеждаемся, что после создании экземпляра поискового сервера в нем отсутствуют документы
         SearchServer server;
@@ -116,6 +117,9 @@ void TestAddDocumentContent()
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
         ASSERT_EQUAL(server.GetDocumentCount(), 1);
     }
+    catch(std::invalid_argument const& ex)
+    {
+    }
 }
 
 // Получение общего числа документов
@@ -128,8 +132,8 @@ void TestCountAllDocuments()
     server.AddDocument(3, "ухоженный скворец евгений"s, DocumentStatus::BANNED, {9});
     ASSERT_EQUAL(server.GetDocumentCount(), 4);
 
-    server.AddDocument(4, "cat in the city", DocumentStatus::ACTUAL, {1, 2, 3});
-    server.AddDocument(5, "cat  in  the city", DocumentStatus::BANNED, {1, 2, 3});
+    server.AddDocument(4, "cat in the city"s, DocumentStatus::ACTUAL, {1, 2, 3});
+    server.AddDocument(5, "cat  in  the city"s, DocumentStatus::BANNED, {1, 2, 3});
     ASSERT_EQUAL(server.GetDocumentCount(), 6);
 }
 
@@ -140,8 +144,8 @@ void TestExcludeStopWordsFromAddedDocumentContent()
     // находит нужный документ
     {
         SearchServer server;
-        server.AddDocument(1, "cat in the city", DocumentStatus::ACTUAL, {1, 2, 3});
-        server.AddDocument(2, "cat out of town", DocumentStatus::ACTUAL, {3, 2, 1});
+        server.AddDocument(1, "cat in the city"s, DocumentStatus::ACTUAL, {1, 2, 3});
+        server.AddDocument(2, "cat out of town"s, DocumentStatus::ACTUAL, {3, 2, 1});
         std::vector<Document> found_docs = server.FindTopDocuments("in"s);
         ASSERT_EQUAL(found_docs.size(), 1);
 
@@ -154,8 +158,8 @@ void TestExcludeStopWordsFromAddedDocumentContent()
     {
         SearchServer server;
         server.SetStopWords("in the"s);
-        server.AddDocument(1, "cat in the city", DocumentStatus::ACTUAL, {1, 2, 3});
-        server.AddDocument(2, "cat out of town", DocumentStatus::ACTUAL, {3, 2, 1});
+        server.AddDocument(1, "cat in the city"s, DocumentStatus::ACTUAL, {1, 2, 3});
+        server.AddDocument(2, "cat out of town"s, DocumentStatus::ACTUAL, {3, 2, 1});
         std::vector<Document> found_docs = server.FindTopDocuments("in"s);
         ASSERT(found_docs.empty());
     }
@@ -163,8 +167,8 @@ void TestExcludeStopWordsFromAddedDocumentContent()
     // Поиск слова в двух одинаковах по содержанию документах, но с разным статусом
     {
         SearchServer server;
-        server.AddDocument(1, "cat in the city", DocumentStatus::ACTUAL, {1, 2, 3});
-        server.AddDocument(2, "cat  in  the city", DocumentStatus::BANNED, {1, 2, 3});
+        server.AddDocument(1, "cat in the city"s, DocumentStatus::ACTUAL, {1, 2, 3});
+        server.AddDocument(2, "cat  in  the city"s, DocumentStatus::BANNED, {1, 2, 3});
         std::vector<Document> found_docs = server.FindTopDocuments("in"s);
         ASSERT_EQUAL(found_docs.size(), 1);
 
@@ -210,21 +214,21 @@ void TestMatchDocument()
         server.AddDocument(2, "пушистый кот лизал пушистый хвост"s, DocumentStatus::ACTUAL, {7, 2, 7});
         server.AddDocument(3, "домашний кот и его выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
 
-        std::vector<std::string> matching_words = {};
+        std::vector<std::string_view> matching_words;
         DocumentStatus document_status;
 
-        tie(matching_words, document_status) = server.MatchDocument("кот енот", 1);
-        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "кот"), 1);
-        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "енот"), 0);
+        tie(matching_words, document_status) = server.MatchDocument("кот енот"s, 1);
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "кот"s), 1);
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "енот"s), 0);
 
-        tie(matching_words, document_status) = server.MatchDocument("глаза енот", 2);
+        tie(matching_words, document_status) = server.MatchDocument("глаза енот"s, 2);
         ASSERT(matching_words.empty());
 
-        tie(matching_words, document_status) = server.MatchDocument("кот глаза", 3);
-        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "глаза"), 1);
-        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "кот"), 1);
+        tie(matching_words, document_status) = server.MatchDocument("кот глаза"s, 3);
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "глаза"s), 1);
+        ASSERT_EQUAL(count(matching_words.begin(), matching_words.end(), "кот"s), 1);
 
-        tie(matching_words, document_status) = server.MatchDocument("кот -глаза", 3);
+        tie(matching_words, document_status) = server.MatchDocument("кот -глаза"s, 3);
         ASSERT(matching_words.empty());
     }
 }
